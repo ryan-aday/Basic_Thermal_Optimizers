@@ -1,7 +1,7 @@
-fprintf("Ryan Aday\nHeat Sink Optimizer\n");
-fprintf("Version 1.0\n");
+print("Ryan Aday\nHeat Sink Optimizer\n")
+print("Version 1.0\n")
 
-fprintf("Optimizes heat sink geometry accounting for material selection, environmental factors, etc.\n");
+print("Optimizes heat sink geometry accounting for material selection, environmental factors, etc.\n")
 
 try:
     import numpy as np
@@ -11,7 +11,7 @@ except ImportError:
         You need the numpy and scipy libraries.
         To install these libraries, please enter:
         pip install numpy scipy
-        """);
+        """)
 
 # Empirical coefficients for thermal conductivity of air (W/m·K)
 A = 0.024
@@ -73,17 +73,22 @@ def objective_function(params, *args):
     heat_load, ambient_temp, thermal_conductivity, target_temp, flow_rate, air_density = args
     num_fins, fin_height, fin_thickness, fin_spacing, base_thickness, base_length, base_width = params
     
-    heat_sink_temp = calculate_heat_sink_temperature(heat_load, ambient_temp, num_fins, fin_height, fin_thickness, fin_spacing, base_thickness, base_length, base_width, thermal_conductivity, flow_rate, air_density)
+    heat_sink_temp = calculate_heat_sink_temperature(heat_load, ambient_temp, int(round(num_fins)), fin_height, fin_thickness, fin_spacing, base_thickness, base_length, base_width, thermal_conductivity, flow_rate, air_density)
     return abs(heat_sink_temp - target_temp)
 
+# Constraints to ensure dimensions and wall thickness are non-negative and within bounds
+def constraint_positive(params):
+    return params
+
 # Optimization function
-def optimize_heat_sink(target_temp, heat_load, ambient_temp, thermal_conductivity, flow_rate, air_density, initial_guess):
+def optimize_heat_sink(target_temp, heat_load, ambient_temp, thermal_conductivity, flow_rate, air_density, initial_guess, bounds):
     args = (heat_load, ambient_temp, thermal_conductivity, target_temp, flow_rate, air_density)
-    result = minimize(objective_function, initial_guess, args=args, method='BFGS')
+    constraints = [{'type': 'ineq', 'fun': lambda x: constraint_positive(x) - np.zeros_like(x)}]
+    result = minimize(objective_function, initial_guess, args=args, method='SLSQP', constraints=constraints, bounds=bounds)
     return result
 
 # Example usage
-target_temp = 310  # K
+target_temp = 300  # K
 heat_load = 50  # W, example value
 ambient_temp = 298  # K, example value
 thermal_conductivity = 200  # W/m·K, example value for aluminum
@@ -91,13 +96,22 @@ flow_rate = 0.01  # m^3/s, example value
 air_density = 1.2  # kg/m^3, example value at room temperature
 initial_guess = [10, 0.05, 0.002, 0.005, 0.01, 0.1, 0.1]  # Initial guess for number of fins, fin height, fin thickness, fin spacing, base thickness, base length, base width
 
-result = optimize_heat_sink(target_temp, heat_load, ambient_temp, thermal_conductivity, flow_rate, air_density, initial_guess)
+# Bounds for the optimization (min and max values for length, width, height, wall thickness)
+bounds = [(1, 100),  # Number of fins must be a positive integer, bounded between 1 and 100
+          (0.01, 0.1),  # Fin height (m)
+          (0.001, 0.01),  # Fin thickness (m)
+          (0.001, 0.01),  # Fin spacing (m)
+          (0.01, 0.1),  # Base thickness (m)
+          (0.05, 0.5),  # Base length (m)
+          (0.05, 0.5)]  # Base width (m)
 
-print(f"Optimal Number of Fins: {result.x[0]}")
-print(f"Optimal Fin Height: {result.x[1]} m")
-print(f"Optimal Fin Thickness: {result.x[2]} m")
-print(f"Optimal Fin Spacing: {result.x[3]} m")
-print(f"Optimal Base Thickness: {result.x[4]} m")
-print(f"Optimal Base Length: {result.x[5]} m")
-print(f"Optimal Base Width: {result.x[6]} m")
-print(f"Achieved Heat Sink Temperature: {calculate_heat_sink_temperature(heat_load, ambient_temp, *result.x, thermal_conductivity, flow_rate, air_density)} K")
+result = optimize_heat_sink(target_temp, heat_load, ambient_temp, thermal_conductivity, flow_rate, air_density, initial_guess, bounds)
+
+print(f"Optimal Number of Fins: {int(round(result.x[0]))}")
+print(f"Optimal Fin Height: {result.x[1]:.4f} m")
+print(f"Optimal Fin Thickness: {result.x[2]:.4f} m")
+print(f"Optimal Fin Spacing: {result.x[3]:.4f} m")
+print(f"Optimal Base Thickness: {result.x[4]:.4f} m")
+print(f"Optimal Base Length: {result.x[5]:.4f} m")
+print(f"Optimal Base Width: {result.x[6]:.4f} m")
+print(f"Achieved Heat Sink Temperature: {calculate_heat_sink_temperature(heat_load, ambient_temp, int(round(result.x[0])), result.x[1], result.x[2], result.x[3], result.x[4], result.x[5], result.x[6], thermal_conductivity, flow_rate, air_density):.2f} K")
